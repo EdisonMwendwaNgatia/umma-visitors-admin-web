@@ -20,6 +20,10 @@ import {
   Download as DownloadIcon,
   PictureAsPdf as PdfIcon,
   Warning as WarningIcon,
+  Male as MaleIcon,
+  Female as FemaleIcon,
+  Transgender as OtherIcon,
+  QuestionMark as QuestionMarkIcon,
 } from '@mui/icons-material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import { collection, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
@@ -108,6 +112,7 @@ const Visitors: React.FC = () => {
             d.insttutlnOccupation ??
             d.institution_occupation ??
             '',
+          gender: d.gender || 'N/A', // Handle missing gender
           checkedInBy: d.checkedInBy || '',
           checkedOutBy: d.checkedOutBy || '',
           isCheckedOut: isCheckedOut,
@@ -145,6 +150,42 @@ const Visitors: React.FC = () => {
     }
     
     return uuid;
+  };
+
+  // Helper function to get gender icon
+  const getGenderIcon = (gender: string) => {
+    switch (gender?.toLowerCase()) {
+      case 'male':
+        return <MaleIcon fontSize="small" />;
+      case 'female':
+        return <FemaleIcon fontSize="small" />;
+      case 'other':
+        return <OtherIcon fontSize="small" />;
+      default:
+        return <QuestionMarkIcon fontSize="small" />;
+    }
+  };
+
+  // Helper function to get gender chip color
+  const getGenderColor = (gender: string) => {
+    switch (gender?.toLowerCase()) {
+      case 'male':
+        return 'primary';
+      case 'female':
+        return 'secondary';
+      case 'other':
+        return 'info';
+      default:
+        return 'default';
+    }
+  };
+
+  // Helper function to format gender display text
+  const formatGenderText = (gender: string) => {
+    if (!gender || gender === 'N/A' || gender.toLowerCase() === 'na') {
+      return 'N/A';
+    }
+    return gender;
   };
 
   const safeDate = (value: any): Date => {
@@ -266,6 +307,30 @@ const Visitors: React.FC = () => {
       width: 150 
     },
     {
+      field: 'gender',
+      headerName: 'Gender',
+      width: 120,
+      renderCell: (params: GridRenderCellParams<Visitor>) => {
+        const gender = params.value as string || 'N/A';
+        return (
+          <Chip
+            icon={getGenderIcon(gender)}
+            label={formatGenderText(gender)}
+            color={getGenderColor(gender) as any}
+            size="small"
+            variant="outlined"
+            sx={{ 
+              minWidth: 80,
+              '& .MuiChip-icon': {
+                marginLeft: '4px',
+                marginRight: '2px',
+              }
+            }}
+          />
+        );
+      },
+    },
+    {
       field: 'visitorType',
       headerName: 'Type',
       width: 120,
@@ -284,6 +349,18 @@ const Visitors: React.FC = () => {
       width: 150,
       renderCell: (params: GridRenderCellParams<Visitor>) => 
         params.value || '-',
+    },
+    { 
+      field: 'residence', 
+      headerName: 'Residence', 
+      width: 180, 
+      flex: 1 
+    },
+    { 
+      field: 'institutionOccupation', 
+      headerName: 'Occupation', 
+      width: 180, 
+      flex: 1 
     },
     { 
       field: 'purposeOfVisit', 

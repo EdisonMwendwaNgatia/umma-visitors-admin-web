@@ -22,6 +22,8 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -33,16 +35,78 @@ const Login: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  // Function to check if user has admin role
+  const checkUserRole = async (userId: string) => {
+    try {
+      const userDocRef = doc(db, 'users', userId);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const role = userData.role;
+        
+        // Check if role is admin
+        if (role === 'admin') {
+          return true;
+        } else {
+          throw new Error('Access denied. Admin privileges required.');
+        }
+      } else {
+        // If user document doesn't exist, create one with admin role
+        // or throw error based on your requirements
+        throw new Error('User profile not found. Please contact administrator.');
+      }
+    } catch (error: any) {
+      throw new Error(error.message || 'Failed to verify user role');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
       setError('');
       setLoading(true);
-      await login(email, password);
-      navigate('/');
+      
+      // Step 1: Login with Firebase Auth
+      const userCredential = await login(email, password);
+      const userId = userCredential.user.uid;
+      
+      // Step 2: Check user role in Firestore
+      const isAdmin = await checkUserRole(userId);
+      
+      if (isAdmin) {
+        // Step 3: Navigate to dashboard if admin
+        navigate('/');
+      }
+      
     } catch (error: any) {
-      setError('Failed to log in: ' + error.message);
+      console.error('Login error:', error);
+      
+      // Specific error messages for different cases
+      if (error.message.includes('auth/invalid-email')) {
+        setError('Invalid email address format.');
+      } else if (error.message.includes('auth/user-not-found')) {
+        setError('No account found with this email.');
+      } else if (error.message.includes('auth/wrong-password')) {
+        setError('Incorrect password. Please try again.');
+      } else if (error.message.includes('auth/too-many-requests')) {
+        setError('Too many failed attempts. Please try again later.');
+      } else if (error.message.includes('Admin privileges')) {
+        setError('Access denied. Admin privileges required.');
+      } else if (error.message.includes('User profile not found')) {
+        setError('User profile not found. Please contact administrator.');
+      } else {
+        setError('Failed to log in: ' + error.message);
+      }
+      
+      // Sign out user if they logged in but don't have admin role
+      try {
+        // You might want to sign out here if using Firebase Auth directly
+        // await auth.signOut();
+      } catch (signOutError) {
+        console.error('Sign out error:', signOutError);
+      }
     } finally {
       setLoading(false);
     }
@@ -118,7 +182,7 @@ const Login: React.FC = () => {
                   fontWeight: 500,
                 }}
               >
-                Visitor Management System
+                Admin Portal
               </Typography>
             </Box>
 
@@ -145,14 +209,14 @@ const Login: React.FC = () => {
                     color: '#1F2937',
                   }}
                 >
-                  Welcome Back
+                  Admin Login
                 </Typography>
                 <Typography 
                   variant="body1" 
                   color="text.secondary"
                   sx={{ fontWeight: 500 }}
                 >
-                  Sign in to manage your visitors
+                  Sign in with admin credentials
                 </Typography>
               </Box>
 
@@ -177,7 +241,7 @@ const Login: React.FC = () => {
                   fullWidth
                   required
                   id="email"
-                  label="Email Address"
+                  label="Admin Email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -295,7 +359,7 @@ const Login: React.FC = () => {
                     <CircularProgress size={24} sx={{ color: 'white' }} />
                   ) : (
                     <>
-                      Sign In
+                      Sign In as Admin
                       <Box component="span" sx={{ ml: 1, fontSize: '1.2rem' }}>
                         →
                       </Box>
@@ -303,22 +367,18 @@ const Login: React.FC = () => {
                   )}
                 </Button>
 
-                {/* Forgot Password */}
+                {/* Admin Note */}
                 <Box sx={{ textAlign: 'center', mt: 2 }}>
-                  <Button
-                    variant="text"
+                  <Typography
+                    variant="caption"
                     sx={{
-                      textTransform: 'none',
                       color: '#6B7280',
                       fontWeight: 500,
-                      '&:hover': {
-                        backgroundColor: 'transparent',
-                        color: '#10B981',
-                      },
+                      display: 'block',
                     }}
                   >
-                    Forgot your password?
-                  </Button>
+                    Only users with admin role can access this portal
+                  </Typography>
                 </Box>
               </Box>
             </Paper>
@@ -345,7 +405,7 @@ const Login: React.FC = () => {
                     fontWeight: 600,
                   }}
                 >
-                  Secure Visitor Management
+                  Secure Admin Portal
                 </Typography>
               </Box>
               <Typography
@@ -355,7 +415,7 @@ const Login: React.FC = () => {
                   fontWeight: 500,
                 }}
               >
-                Your data is protected and encrypted
+                Role-based access control enabled
               </Typography>
             </Paper>
           </Box>

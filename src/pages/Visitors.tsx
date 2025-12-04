@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -24,6 +24,8 @@ import {
   Female as FemaleIcon,
   Transgender as OtherIcon,
   QuestionMark as QuestionMarkIcon,
+  LocalOffer as TagIcon,
+  DoNotDisturb as NoTagIcon,
 } from '@mui/icons-material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import { collection, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
@@ -69,7 +71,7 @@ const Visitors: React.FC = () => {
   };
 
   // Fetch both users and visitors
-  const fetchUsersAndVisitors = async () => {
+  const fetchUsersAndVisitors = useCallback(async () => {
     setLoading(true);
     try {
       // Fetch users first
@@ -112,7 +114,9 @@ const Visitors: React.FC = () => {
             d.insttutlnOccupation ??
             d.institution_occupation ??
             '',
-          gender: d.gender || 'N/A', // Handle missing gender
+          gender: d.gender || 'N/A',
+          tagNumber: d.tagNumber || 'N/A', // Added tag number
+          tagNotGiven: d.tagNotGiven || false, // Added tag not given flag
           checkedInBy: d.checkedInBy || '',
           checkedOutBy: d.checkedOutBy || '',
           isCheckedOut: isCheckedOut,
@@ -128,7 +132,7 @@ const Visitors: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Helper function to get display name from UUID
   const getDisplayNameFromUUID = (uuid: string): string => {
@@ -186,6 +190,56 @@ const Visitors: React.FC = () => {
       return 'N/A';
     }
     return gender;
+  };
+
+  // Helper function for tag display
+  const getTagDisplay = (tagNumber: string, tagNotGiven: boolean) => {
+    if (tagNotGiven) {
+      return (
+        <Chip
+          icon={<NoTagIcon />}
+          label="Not Given"
+          color="warning"
+          size="small"
+          variant="outlined"
+          sx={{ 
+            minWidth: 100,
+            '& .MuiChip-icon': {
+              marginLeft: '4px',
+              marginRight: '2px',
+            }
+          }}
+        />
+      );
+    }
+    
+    if (tagNumber && tagNumber !== 'N/A') {
+      return (
+        <Chip
+          icon={<TagIcon />}
+          label={`Tag #${tagNumber}`}
+          color="success"
+          size="small"
+          variant="filled"
+          sx={{ 
+            minWidth: 100,
+            '& .MuiChip-icon': {
+              marginLeft: '4px',
+              marginRight: '2px',
+            }
+          }}
+        />
+      );
+    }
+    
+    return (
+      <Chip
+        label="N/A"
+        size="small"
+        variant="outlined"
+        sx={{ minWidth: 100 }}
+      />
+    );
   };
 
   const safeDate = (value: any): Date => {
@@ -328,6 +382,16 @@ const Visitors: React.FC = () => {
             }}
           />
         );
+      },
+    },
+    {
+      field: 'tagInfo',
+      headerName: 'Tag',
+      width: 140,
+      renderCell: (params: GridRenderCellParams<Visitor>) => {
+        const tagNumber = params.row.tagNumber || 'N/A';
+        const tagNotGiven = params.row.tagNotGiven || false;
+        return getTagDisplay(tagNumber, tagNotGiven);
       },
     },
     {
@@ -565,6 +629,12 @@ const Visitors: React.FC = () => {
                         },
                         '& .MuiDataGrid-row:hover': {
                           backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                        },
+                        '& .overdue-row': {
+                          backgroundColor: 'rgba(244, 67, 54, 0.08)',
+                          '&:hover': {
+                            backgroundColor: 'rgba(244, 67, 54, 0.12)',
+                          },
                         },
                       }}
                       getRowClassName={(params) => 

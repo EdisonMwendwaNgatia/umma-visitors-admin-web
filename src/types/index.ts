@@ -1,23 +1,35 @@
 export interface Visitor {
-  id?: string;
+  id: string;
   visitorName: string;
   phoneNumber: string;
   idNumber: string;
-  refNumber?: string; // For vehicles only
+  refNumber?: string; 
   residence: string;
   institutionOccupation: string;
   purposeOfVisit: string;
-  gender: string; // Added gender field
-  tagNumber?: string; // Added tag number field
-  tagNotGiven?: boolean; // Added tag not given flag
+  gender: string; 
+  tagNumber?: string; 
+  tagNotGiven?: boolean; 
   timeIn: Date;
   timeOut?: Date;
-  signIn?: string; // Base64 signature or URL
-  signOut?: string; // Base64 signature or URL
+  signIn?: string; 
+  signOut?: string; 
   visitorType: 'foot' | 'vehicle';
-  checkedInBy: string; // User ID who checked in the visitor
-  checkedOutBy?: string; // User ID who checked out the visitor
+  checkedInBy: string; 
+  checkedOutBy?: string; 
   isCheckedOut: boolean;
+
+  editedBy?: string;
+  lastEditedAt?: Date;
+  editHistory?: VisitorEditHistory[];
+}
+
+export interface VisitorEditHistory {
+  field: string;
+  oldValue: any;
+  newValue: any;
+  editedBy: string;
+  editedAt: Date | any;
 }
 
 export interface Stats {
@@ -33,6 +45,6 @@ export interface Stats {
 export interface User {
   uid: string;
   email: string;
-  displayName?: string; // Changed from 'name' to 'displayName' to match usage
-  role?: string; // Added role field
+  displayName?: string; 
+  role?: string; 
 }

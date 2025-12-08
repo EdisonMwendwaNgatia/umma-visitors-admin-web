@@ -19,26 +19,46 @@ import {
   ExpandMore as ExpandMoreIcon,
   Download as DownloadIcon,
   PictureAsPdf as PdfIcon,
-  Warning as WarningIcon,
   Male as MaleIcon,
   Female as FemaleIcon,
   Transgender as OtherIcon,
   QuestionMark as QuestionMarkIcon,
   LocalOffer as TagIcon,
-  DoNotDisturb as NoTagIcon,
+  History as HistoryIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import { collection, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { Visitor, User } from '../types';
 import { generateVisitorsPDF } from '../utils/pdfGenerator';
+import { updateVisitorField } from '../utils/firebaseUtils';
+import { EditableCell } from '../components/EditableCell';
+import { EditHistoryDialog } from '../components/EditHistoryDialog';
+import VisitorSearchBar from '../components/VisitorSearchBar';
+import CheckoutComponent from '../components/CheckoutComponent';
+import { useAuth } from '../contexts/AuthContext';
 
 const Visitors: React.FC = () => {
   const [visitors, setVisitors] = useState<Visitor[]>([]);
+  const [filteredVisitors, setFilteredVisitors] = useState<Visitor[]>([]);
   const [groupedVisitors, setGroupedVisitors] = useState<{ [key: string]: Visitor[] }>({});
+  const [groupedFilteredVisitors, setGroupedFilteredVisitors] = useState<{ [key: string]: Visitor[] }>({});
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloadMenuAnchor, setDownloadMenuAnchor] = useState<null | HTMLElement>(null);
+  const [editHistoryDialog, setEditHistoryDialog] = useState<{
+    open: boolean;
+    editHistory: any[];
+    visitorName?: string;
+  }>({ open: false, editHistory: [] });
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResultCount, setSearchResultCount] = useState(0);
+
+  const { user: currentUser, userRole } = useAuth();
+  const currentUserUid = currentUser?.uid || '';
+  const currentUserEmail = currentUser?.email || '';
+  const isAdmin = userRole === 'admin';
 
   useEffect(() => {
     fetchUsersAndVisitors();
@@ -70,7 +90,7 @@ const Visitors: React.FC = () => {
     return hoursSinceCheckIn > 12;
   };
 
-  // Fetch both users and visitors
+  // Fetch both users and visitors with edit history
   const fetchUsersAndVisitors = useCallback(async () => {
     setLoading(true);
     try {
@@ -115,24 +135,160 @@ const Visitors: React.FC = () => {
             d.institution_occupation ??
             '',
           gender: d.gender || 'N/A',
-          tagNumber: d.tagNumber || 'N/A', // Added tag number
-          tagNotGiven: d.tagNotGiven || false, // Added tag not given flag
+          tagNumber: d.tagNumber || 'N/A',
+          tagNotGiven: d.tagNotGiven || false,
           checkedInBy: d.checkedInBy || '',
           checkedOutBy: d.checkedOutBy || '',
           isCheckedOut: isCheckedOut,
           timeIn: safeDate(d.timeIn),
           timeOut: isCheckedOut ? safeDate(d.timeOut ?? d.timeout ?? d.time_out) : undefined,
+          // Edit tracking fields
+          editedBy: d.editedBy || '',
+          lastEditedAt: d.lastEditedAt ? safeDate(d.lastEditedAt) : undefined,
+          editHistory: d.editHistory || [],
         };
       });
 
       setVisitors(visitorsData);
+      setFilteredVisitors(visitorsData);
       setGroupedVisitors(groupVisitorsByDate(visitorsData));
+      setGroupedFilteredVisitors(groupVisitorsByDate(visitorsData));
+      setSearchResultCount(visitorsData.length);
     } catch (err) {
       console.error('Error fetching data:', err);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  // Handle search results
+  const handleSearchResults = (filteredVisitors: Visitor[]) => {
+    setFilteredVisitors(filteredVisitors);
+    setGroupedFilteredVisitors(groupVisitorsByDate(filteredVisitors));
+    setIsSearching(true);
+    setSearchResultCount(filteredVisitors.length);
+  };
+
+  // Handle clear search
+  const handleClearSearch = () => {
+    setFilteredVisitors(visitors);
+    setGroupedFilteredVisitors(groupVisitorsByDate(visitors));
+    setIsSearching(false);
+    setSearchResultCount(visitors.length);
+  };
+
+// Handle field update
+const handleFieldUpdate = async (field: string, newValue: any, visitorData: Visitor) => {
+  console.log('handleFieldUpdate called:', { field, newValue, visitorData: visitorData.id });
+  
+  if (!isAdmin) {
+    alert('Only admins can edit visitor information.');
+    return false;
+  }
+
+  try {
+    const oldValue = visitorData[field as keyof Visitor];
+    console.log('Old value:', oldValue);
+
+    // Call the update function
+    const success = await updateVisitorField(
+      visitorData.id,
+      field,
+      newValue,
+      oldValue,
+      currentUserUid,
+      visitorData
+    );
+
+    if (!success) {
+      throw new Error('Failed to update field in Firebase');
+    }
+
+    // Update local state
+    const updatedVisitor = {
+      ...visitorData,
+      [field]: newValue,
+      editedBy: currentUserUid,
+      lastEditedAt: new Date(),
+      editHistory: [
+        ...(visitorData.editHistory || []),
+        {
+          field,
+          oldValue,
+          newValue,
+          editedBy: currentUserUid,
+          editedAt: new Date(),
+        }
+      ]
+    };
+
+    // Update visitors state
+    setVisitors(prev => prev.map(v => v.id === visitorData.id ? updatedVisitor : v));
+
+    // Update filtered visitors if in search mode
+    if (isSearching) {
+      setFilteredVisitors(prev => prev.map(v => v.id === visitorData.id ? updatedVisitor : v));
+    }
+
+    // Update grouped visitors
+    setGroupedVisitors(prev => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach(date => {
+        updated[date] = updated[date].map(v => v.id === visitorData.id ? updatedVisitor : v);
+      });
+      return updated;
+    });
+
+    // Update grouped filtered visitors
+    if (isSearching) {
+      setGroupedFilteredVisitors(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(date => {
+          updated[date] = updated[date].map(v => v.id === visitorData.id ? updatedVisitor : v);
+        });
+        return updated;
+      });
+    }
+
+    console.log('Local state updated successfully');
+    return true;
+  } catch (error) {
+    console.error('Error updating field:', error);
+    alert(`Failed to update field: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return false;
+  }
+};
+
+  // Handle checkout success
+  const handleCheckoutSuccess = (updatedVisitor: Visitor) => {
+    // Update local state
+    setVisitors(prev => prev.map(v => v.id === updatedVisitor.id ? updatedVisitor : v));
+    
+    // Update filtered visitors if in search mode
+    if (isSearching) {
+      setFilteredVisitors(prev => prev.map(v => v.id === updatedVisitor.id ? updatedVisitor : v));
+    }
+
+    // Update grouped visitors
+    setGroupedVisitors(prev => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach(date => {
+        updated[date] = updated[date].map(v => v.id === updatedVisitor.id ? updatedVisitor : v);
+      });
+      return updated;
+    });
+
+    // Update grouped filtered visitors if in search mode
+    if (isSearching) {
+      setGroupedFilteredVisitors(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(date => {
+          updated[date] = updated[date].map(v => v.id === updatedVisitor.id ? updatedVisitor : v);
+        });
+        return updated;
+      });
+    }
+  };
 
   // Helper function to get display name from UUID
   const getDisplayNameFromUUID = (uuid: string): string => {
@@ -192,37 +348,18 @@ const Visitors: React.FC = () => {
     return gender;
   };
 
-  // Helper function for tag display
+  // Helper function for tag display - Simplified to only show tag number or N/A
   const getTagDisplay = (tagNumber: string, tagNotGiven: boolean) => {
-    if (tagNotGiven) {
-      return (
-        <Chip
-          icon={<NoTagIcon />}
-          label="Not Given"
-          color="warning"
-          size="small"
-          variant="outlined"
-          sx={{ 
-            minWidth: 100,
-            '& .MuiChip-icon': {
-              marginLeft: '4px',
-              marginRight: '2px',
-            }
-          }}
-        />
-      );
-    }
-    
     if (tagNumber && tagNumber !== 'N/A') {
       return (
         <Chip
           icon={<TagIcon />}
-          label={`Tag #${tagNumber}`}
+          label={`#${tagNumber}`}
           color="success"
           size="small"
           variant="filled"
           sx={{ 
-            minWidth: 100,
+            minWidth: 80,
             '& .MuiChip-icon': {
               marginLeft: '4px',
               marginRight: '2px',
@@ -237,7 +374,7 @@ const Visitors: React.FC = () => {
         label="N/A"
         size="small"
         variant="outlined"
-        sx={{ minWidth: 100 }}
+        sx={{ minWidth: 80 }}
       />
     );
   };
@@ -343,22 +480,68 @@ const Visitors: React.FC = () => {
     handleDownloadPDF(todayVisitors);
   };
 
+  // Show edit history
+  const showEditHistory = (visitor: Visitor) => {
+    setEditHistoryDialog({
+      open: true,
+      editHistory: visitor.editHistory || [],
+      visitorName: visitor.visitorName,
+    });
+  };
+
   const columns: GridColDef[] = [
     { 
       field: 'visitorName', 
       headerName: 'Visitor Name', 
       width: 200, 
-      flex: 1 
+      flex: 1,
+      renderCell: (params: GridRenderCellParams<Visitor>) => (
+        <EditableCell
+          value={params.value}
+          field="visitorName"
+          visitorId={params.row.id || ''}
+          visitorData={params.row}
+          onSave={handleFieldUpdate}
+          currentUserUid={currentUserUid}
+          userRole={userRole || ''}
+          readOnly={!isAdmin}
+        />
+      ),
     },
     { 
       field: 'phoneNumber', 
       headerName: 'Phone', 
-      width: 150 
+      width: 150,
+      renderCell: (params: GridRenderCellParams<Visitor>) => (
+        <EditableCell
+          value={params.value}
+          field="phoneNumber"
+          visitorId={params.row.id || ''}
+          visitorData={params.row}
+          onSave={handleFieldUpdate}
+          type="text"
+          currentUserUid={currentUserUid}
+          userRole={userRole || ''}
+          readOnly={!isAdmin}
+        />
+      ),
     },
     { 
       field: 'idNumber', 
       headerName: 'ID Number', 
-      width: 150 
+      width: 150,
+      renderCell: (params: GridRenderCellParams<Visitor>) => (
+        <EditableCell
+          value={params.value}
+          field="idNumber"
+          visitorId={params.row.id || ''}
+          visitorData={params.row}
+          onSave={handleFieldUpdate}
+          currentUserUid={currentUserUid}
+          userRole={userRole || ''}
+          readOnly={!isAdmin}
+        />
+      ),
     },
     {
       field: 'gender',
@@ -367,19 +550,22 @@ const Visitors: React.FC = () => {
       renderCell: (params: GridRenderCellParams<Visitor>) => {
         const gender = params.value as string || 'N/A';
         return (
-          <Chip
-            icon={getGenderIcon(gender)}
-            label={formatGenderText(gender)}
-            color={getGenderColor(gender) as any}
-            size="small"
-            variant="outlined"
-            sx={{ 
-              minWidth: 80,
-              '& .MuiChip-icon': {
-                marginLeft: '4px',
-                marginRight: '2px',
-              }
-            }}
+          <EditableCell
+            value={gender}
+            field="gender"
+            visitorId={params.row.id || ''}
+            visitorData={params.row}
+            onSave={handleFieldUpdate}
+            type="select"
+            options={[
+              { value: 'Male', label: 'Male' },
+              { value: 'Female', label: 'Female' },
+              { value: 'Other', label: 'Other' },
+              { value: 'N/A', label: 'N/A' },
+            ]}
+            currentUserUid={currentUserUid}
+            userRole={userRole || ''}
+            readOnly={!isAdmin}
           />
         );
       },
@@ -387,11 +573,26 @@ const Visitors: React.FC = () => {
     {
       field: 'tagInfo',
       headerName: 'Tag',
-      width: 140,
+      width: 120,
       renderCell: (params: GridRenderCellParams<Visitor>) => {
         const tagNumber = params.row.tagNumber || 'N/A';
-        const tagNotGiven = params.row.tagNotGiven || false;
-        return getTagDisplay(tagNumber, tagNotGiven);
+        
+        if (isAdmin) {
+          return (
+            <EditableCell
+              value={tagNumber}
+              field="tagNumber"
+              visitorId={params.row.id || ''}
+              visitorData={params.row}
+              onSave={handleFieldUpdate}
+              currentUserUid={currentUserUid}
+              userRole={userRole || ''}
+              placeholder="Tag number"
+            />
+          );
+        }
+        
+        return getTagDisplay(tagNumber, false);
       },
     },
     {
@@ -399,11 +600,20 @@ const Visitors: React.FC = () => {
       headerName: 'Type',
       width: 120,
       renderCell: (params: GridRenderCellParams<Visitor>) => (
-        <Chip
-          label={params.value}
-          color={params.value === 'vehicle' ? 'primary' : 'default'}
-          size="small"
-          variant="outlined"
+        <EditableCell
+          value={params.value}
+          field="visitorType"
+          visitorId={params.row.id || ''}
+          visitorData={params.row}
+          onSave={handleFieldUpdate}
+          type="select"
+          options={[
+            { value: 'foot', label: 'Foot' },
+            { value: 'vehicle', label: 'Vehicle' },
+          ]}
+          currentUserUid={currentUserUid}
+          userRole={userRole || ''}
+          readOnly={!isAdmin}
         />
       ),
     },
@@ -411,26 +621,75 @@ const Visitors: React.FC = () => {
       field: 'refNumber',
       headerName: 'Vehicle Plate',
       width: 150,
-      renderCell: (params: GridRenderCellParams<Visitor>) => 
-        params.value || '-',
+      renderCell: (params: GridRenderCellParams<Visitor>) => (
+        <EditableCell
+          value={params.value}
+          field="refNumber"
+          visitorId={params.row.id || ''}
+          visitorData={params.row}
+          onSave={handleFieldUpdate}
+          currentUserUid={currentUserUid}
+          userRole={userRole || ''}
+          readOnly={!isAdmin}
+        />
+      ),
     },
     { 
       field: 'residence', 
       headerName: 'Residence', 
       width: 180, 
-      flex: 1 
+      flex: 1,
+      renderCell: (params: GridRenderCellParams<Visitor>) => (
+        <EditableCell
+          value={params.value}
+          field="residence"
+          visitorId={params.row.id || ''}
+          visitorData={params.row}
+          onSave={handleFieldUpdate}
+          multiline
+          currentUserUid={currentUserUid}
+          userRole={userRole || ''}
+          readOnly={!isAdmin}
+        />
+      ),
     },
     { 
       field: 'institutionOccupation', 
       headerName: 'Occupation', 
       width: 180, 
-      flex: 1 
+      flex: 1,
+      renderCell: (params: GridRenderCellParams<Visitor>) => (
+        <EditableCell
+          value={params.value}
+          field="institutionOccupation"
+          visitorId={params.row.id || ''}
+          visitorData={params.row}
+          onSave={handleFieldUpdate}
+          multiline
+          currentUserUid={currentUserUid}
+          userRole={userRole || ''}
+          readOnly={!isAdmin}
+        />
+      ),
     },
     { 
       field: 'purposeOfVisit', 
       headerName: 'Purpose', 
       width: 200, 
-      flex: 1 
+      flex: 1,
+      renderCell: (params: GridRenderCellParams<Visitor>) => (
+        <EditableCell
+          value={params.value}
+          field="purposeOfVisit"
+          visitorId={params.row.id || ''}
+          visitorData={params.row}
+          onSave={handleFieldUpdate}
+          multiline
+          currentUserUid={currentUserUid}
+          userRole={userRole || ''}
+          readOnly={!isAdmin}
+        />
+      ),
     },
     {
       field: 'timeIn',
@@ -455,40 +714,18 @@ const Visitors: React.FC = () => {
     {
       field: 'status',
       headerName: 'Status',
-      width: 130,
-      renderCell: (params: GridRenderCellParams<Visitor>) => {
-        const visitor = params.row as Visitor;
-        
-        if (visitor.isCheckedOut) {
-          return (
-            <Chip
-              label="Checked Out"
-              color="default"
-              variant="outlined"
-              size="small"
-            />
-          );
-        } else if (isVisitorOverdue(visitor)) {
-          return (
-            <Chip
-              icon={<WarningIcon />}
-              label="Overdue"
-              color="error"
-              variant="filled"
-              size="small"
-            />
-          );
-        } else {
-          return (
-            <Chip
-              label="Active"
-              color="success"
-              variant="filled"
-              size="small"
-            />
-          );
-        }
-      },
+      width: 180,
+      renderCell: (params: GridRenderCellParams<Visitor>) => (
+        <CheckoutComponent
+          visitor={params.row}
+          currentUserUid={currentUserUid}
+          currentUserEmail={currentUserEmail}
+          onCheckoutSuccess={handleCheckoutSuccess}
+          isAdmin={isAdmin}
+          isVisitorOverdue={isVisitorOverdue}
+          formatDateTime={formatDateTime}
+        />
+      ),
     },
     { 
       field: 'checkedInBy', 
@@ -510,18 +747,69 @@ const Visitors: React.FC = () => {
         </Tooltip>
       ),
     },
+    {
+      field: 'editedBy',
+      headerName: 'Last Edited By',
+      width: 180,
+      renderCell: (params: GridRenderCellParams<Visitor>) => (
+        <Tooltip title={`Last edited at: ${params.row.lastEditedAt ? formatDateTime(params.row.lastEditedAt) : 'Never'}`}>
+          <span>
+            {params.row.editedBy ? getDisplayNameFromUUID(params.row.editedBy) : '-'}
+          </span>
+        </Tooltip>
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: 'History',
+      width: 100,
+      renderCell: (params: GridRenderCellParams<Visitor>) => (
+        <Tooltip title="View Edit History">
+          <IconButton
+            size="small"
+            onClick={() => showEditHistory(params.row)}
+            disabled={!params.row.editHistory || params.row.editHistory.length === 0}
+          >
+            <HistoryIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      ),
+    },
   ];
+
+  // Get the visitors to display (either filtered or all)
+  const displayGroupedVisitors = isSearching ? groupedFilteredVisitors : groupedVisitors;
+  const displayVisitors = isSearching ? filteredVisitors : visitors;
 
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Box>
           <Typography variant="h4" gutterBottom>
-            All Visitors
+            All Visitors {isAdmin && <Chip label="Admin Mode" size="small" color="primary" sx={{ ml: 1 }} />}
+            {isSearching && (
+              <Chip 
+                label={`Search Results: ${searchResultCount} found`} 
+                color="info" 
+                size="small" 
+                sx={{ ml: 1 }}
+                icon={<SearchIcon />}
+              />
+            )}
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Total: {visitors.length} visitors • {visitors.filter(v => !v.isCheckedOut).length} active • {visitors.filter(v => isVisitorOverdue(v)).length} overdue
+            Total: {displayVisitors.length} visitors • {displayVisitors.filter(v => !v.isCheckedOut).length} active • {displayVisitors.filter(v => isVisitorOverdue(v)).length} overdue
+            {isSearching && visitors.length !== displayVisitors.length && (
+              <span style={{ marginLeft: 8 }}>
+                (Filtered from {visitors.length} total)
+              </span>
+            )}
           </Typography>
+          {isAdmin && (
+            <Alert severity="info" sx={{ mt: 1, maxWidth: 600 }}>
+              You are in admin mode. Click on any field to edit. All changes are tracked.
+            </Alert>
+          )}
         </Box>
         <Box display="flex" gap={1}>
           <Button
@@ -544,6 +832,12 @@ const Visitors: React.FC = () => {
               <PdfIcon sx={{ mr: 1 }} />
               Download Today's Report
             </MenuItem>
+            {isSearching && (
+              <MenuItem onClick={() => handleDownloadPDF(filteredVisitors)}>
+                <PdfIcon sx={{ mr: 1 }} />
+                Download Search Results ({filteredVisitors.length})
+              </MenuItem>
+            )}
           </Menu>
           <Tooltip title="Refresh">
             <IconButton onClick={fetchUsersAndVisitors} disabled={loading}>
@@ -553,21 +847,28 @@ const Visitors: React.FC = () => {
         </Box>
       </Box>
 
-      {Object.keys(groupedVisitors).length === 0 && !loading ? (
+      {/* Search Bar */}
+      <VisitorSearchBar
+        visitors={visitors}
+        onSearchResults={handleSearchResults}
+        onClearSearch={handleClearSearch}
+      />
+
+      {Object.keys(displayGroupedVisitors).length === 0 && !loading ? (
         <Alert severity="info" sx={{ mb: 2 }}>
-          No visitor data found.
+          {isSearching ? 'No visitors found matching your search criteria.' : 'No visitor data found.'}
         </Alert>
       ) : (
-        Object.keys(groupedVisitors)
+        Object.keys(displayGroupedVisitors)
           .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
           .map(date => {
-            const dateVisitors = groupedVisitors[date];
+            const dateVisitors = displayGroupedVisitors[date];
             const stats = getDateStats(dateVisitors);
             
             return (
               <Accordion 
                 key={date} 
-                defaultExpanded={date === new Date().toDateString()}
+                defaultExpanded={date === new Date().toDateString() && !isSearching}
                 sx={{ mb: 2 }}
               >
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -591,23 +892,32 @@ const Visitors: React.FC = () => {
                       )}
                       {stats.overdue > 0 && (
                         <Chip 
-                          icon={<WarningIcon />}
                           label={`${stats.overdue} overdue`} 
                           color="error" 
                           size="small" 
                         />
                       )}
+                      {isSearching && dateVisitors.length > 0 && (
+                        <Chip 
+                          label={`${dateVisitors.length} match${dateVisitors.length > 1 ? 'es' : ''}`} 
+                          color="info" 
+                          size="small" 
+                          variant="outlined"
+                        />
+                      )}
                     </Box>
-                    <Button
-                      size="small"
-                      startIcon={<PdfIcon />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDownloadPDF(dateVisitors);
-                      }}
-                    >
-                      PDF
-                    </Button>
+                    <Box display="flex" gap={1}>
+                      <Button
+                        size="small"
+                        startIcon={<PdfIcon />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownloadPDF(dateVisitors);
+                        }}
+                      >
+                        PDF
+                      </Button>
+                    </Box>
                   </Box>
                 </AccordionSummary>
                 <AccordionDetails sx={{ p: 0 }}>
@@ -636,10 +946,19 @@ const Visitors: React.FC = () => {
                             backgroundColor: 'rgba(244, 67, 54, 0.12)',
                           },
                         },
+                        '& .search-highlight-row': {
+                          backgroundColor: 'rgba(255, 245, 204, 0.3)',
+                          '&:hover': {
+                            backgroundColor: 'rgba(255, 245, 204, 0.5)',
+                          },
+                        },
                       }}
-                      getRowClassName={(params) => 
-                        isVisitorOverdue(params.row) ? 'overdue-row' : ''
-                      }
+                      getRowClassName={(params) => {
+                        const classes = [];
+                        if (isVisitorOverdue(params.row)) classes.push('overdue-row');
+                        if (isSearching) classes.push('search-highlight-row');
+                        return classes.join(' ');
+                      }}
                     />
                   </Paper>
                 </AccordionDetails>
@@ -647,6 +966,14 @@ const Visitors: React.FC = () => {
             );
           })
       )}
+
+      <EditHistoryDialog
+        open={editHistoryDialog.open}
+        onClose={() => setEditHistoryDialog({ open: false, editHistory: [] })}
+        editHistory={editHistoryDialog.editHistory}
+        users={users}
+        visitorName={editHistoryDialog.visitorName}
+      />
     </Box>
   );
 };

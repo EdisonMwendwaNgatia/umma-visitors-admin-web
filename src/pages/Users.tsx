@@ -27,12 +27,14 @@ import {
   Refresh as RefreshIcon,
   Add as AddIcon,
   Edit as EditIcon,
+  Delete as DeleteIcon,
   Person as PersonIcon,
   Email as EmailIcon,
   Badge as BadgeIcon,
   AdminPanelSettings as AdminIcon,
   Security as SecurityIcon,
   CheckCircle as CheckCircleIcon,
+  Warning as WarningIcon,
 } from '@mui/icons-material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import { 
@@ -42,11 +44,13 @@ import {
   orderBy, 
   doc, 
   updateDoc,
-  setDoc 
+  setDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { 
   createUserWithEmailAndPassword,
-  updateProfile 
+  updateProfile,
+  deleteUser as deleteAuthUser
 } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { User } from '../types';
@@ -56,7 +60,11 @@ const Users: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [addUserOpen, setAddUserOpen] = useState(false);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    user: User | null;
+  }>({ open: false, user: null });
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' });
   const [newUser, setNewUser] = useState({
     email: '',
     password: '',
@@ -93,7 +101,7 @@ const Users: React.FC = () => {
     }
   };
 
-  const showSnackbar = (message: string, severity: 'success' | 'error') => {
+  const showSnackbar = (message: string, severity: 'success' | 'error' | 'warning') => {
     setSnackbar({ open: true, message, severity });
   };
 
@@ -193,6 +201,52 @@ const Users: React.FC = () => {
       
       showSnackbar(errorMessage, 'error');
     }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteDialog.user) return;
+
+    const userToDelete = deleteDialog.user;
+    
+    try {
+      // First delete from Firestore
+      await deleteDoc(doc(db, 'users', userToDelete.uid));
+      
+      // Try to delete from Authentication (only if it's not the current user)
+      const currentUser = auth.currentUser;
+      if (currentUser && currentUser.uid !== userToDelete.uid) {
+        try {
+          // Note: To delete a user from Authentication, you need admin privileges
+          // This would typically be done via Cloud Functions or Admin SDK
+          // For now, we'll just delete from Firestore
+          console.log('User deleted from Firestore. Note: Authentication deletion requires admin privileges.');
+        } catch (authError) {
+          console.warn('Could not delete from Authentication:', authError);
+          // Continue even if auth deletion fails
+        }
+      } else if (currentUser?.uid === userToDelete.uid) {
+        showSnackbar('Cannot delete currently logged in user', 'warning');
+        setDeleteDialog({ open: false, user: null });
+        return;
+      }
+
+      // Update local state
+      setUsers(users.filter(user => user.uid !== userToDelete.uid));
+      
+      // Close dialog and show success message
+      setDeleteDialog({ open: false, user: null });
+      showSnackbar(`${userToDelete.displayName || userToDelete.email} has been deleted successfully`, 'success');
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      showSnackbar('Error deleting user', 'error');
+    }
+  };
+
+  const openDeleteDialog = (user: User) => {
+    setDeleteDialog({
+      open: true,
+      user,
+    });
   };
 
   const StatCard: React.FC<{
@@ -323,21 +377,40 @@ const Users: React.FC = () => {
             )}
           </Box>
           {editingUser?.uid !== params.row.uid && (
-            <Tooltip title="Edit Name">
-              <IconButton
-                size="small"
-                onClick={() => handleEditDisplayName(params.row)}
-                sx={{ 
-                  color: '#6B7280',
-                  '&:hover': {
-                    color: '#10B981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)'
-                  }
-                }}
-              >
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+            <Box display="flex" gap={0.5}>
+              <Tooltip title="Edit Name">
+                <IconButton
+                  size="small"
+                  onClick={() => handleEditDisplayName(params.row)}
+                  sx={{ 
+                    color: '#6B7280',
+                    '&:hover': {
+                      color: '#10B981',
+                      backgroundColor: 'rgba(16, 185, 129, 0.1)'
+                    }
+                  }}
+                >
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              {auth.currentUser?.uid !== params.row.uid && (
+                <Tooltip title="Delete User">
+                  <IconButton
+                    size="small"
+                    onClick={() => openDeleteDialog(params.row)}
+                    sx={{ 
+                      color: '#6B7280',
+                      '&:hover': {
+                        color: '#EF4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)'
+                      }
+                    }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Box>
           )}
         </Box>
       ),
@@ -669,6 +742,87 @@ const Users: React.FC = () => {
             startIcon={<CheckCircleIcon />}
           >
             Create User
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialog.open}
+        onClose={() => setDeleteDialog({ open: false, user: null })}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          backgroundColor: '#FEF2F2',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          fontWeight: 700,
+          color: '#DC2626'
+        }}>
+          <Box display="flex" alignItems="center" gap={2}>
+            <WarningIcon color="error" />
+            Delete User
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ mt: 3 }}>
+          {deleteDialog.user && (
+            <Box>
+              <Typography variant="body1" gutterBottom>
+                Are you sure you want to delete <strong>{deleteDialog.user.displayName || deleteDialog.user.email}</strong>?
+              </Typography>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Email: {deleteDialog.user.email}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Role: {deleteDialog.user.role}
+              </Typography>
+              <Alert 
+                severity="warning" 
+                sx={{ mt: 2, borderRadius: 2 }}
+                icon={<WarningIcon />}
+              >
+                <Typography variant="body2" fontWeight={600}>
+                  This action cannot be undone. The user will lose all access to the system.
+                </Typography>
+              </Alert>
+              {auth.currentUser?.uid === deleteDialog.user.uid && (
+                <Alert 
+                  severity="error" 
+                  sx={{ mt: 2, borderRadius: 2 }}
+                >
+                  <Typography variant="body2" fontWeight={600}>
+                    Warning: You cannot delete your own account while logged in.
+                  </Typography>
+                </Alert>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3, gap: 1 }}>
+          <Button 
+            onClick={() => setDeleteDialog({ open: false, user: null })} 
+            variant="outlined"
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleDeleteUser} 
+            variant="contained"
+            color="error"
+            disabled={auth.currentUser?.uid === deleteDialog.user?.uid}
+            startIcon={<DeleteIcon />}
+            sx={{
+              backgroundColor: '#DC2626',
+              '&:hover': {
+                backgroundColor: '#B91C1C',
+              }
+            }}
+          >
+            Delete User
           </Button>
         </DialogActions>
       </Dialog>

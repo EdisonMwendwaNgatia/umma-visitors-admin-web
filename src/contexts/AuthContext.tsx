@@ -13,7 +13,8 @@ interface AuthContextType {
   checkUserRole: (userId: string) => Promise<string | null>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// Export the context itself
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -93,7 +94,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUserRole(null);
   };
 
-  const value = {
+  const value: AuthContextType = {
     user,
     userRole,
     loading,

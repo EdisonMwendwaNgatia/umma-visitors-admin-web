@@ -40,6 +40,9 @@ export interface Stats {
   vehicleVisitors: number;
   footVisitors: number;
   checkedOutVisitors: number;
+  maleVisitors: number;
+  femaleVisitors: number;
+  otherGenderVisitors: number;
 }
 
 export interface User {

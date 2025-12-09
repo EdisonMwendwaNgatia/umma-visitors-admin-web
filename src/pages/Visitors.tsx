@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -13,20 +13,23 @@ import {
   Alert,
   Menu,
   MenuItem,
+  Tabs,
+  Tab,
 } from '@mui/material';
-import {
-  Refresh as RefreshIcon,
-  ExpandMore as ExpandMoreIcon,
-  Download as DownloadIcon,
-  PictureAsPdf as PdfIcon,
-  Male as MaleIcon,
-  Female as FemaleIcon,
-  Transgender as OtherIcon,
-  QuestionMark as QuestionMarkIcon,
-  LocalOffer as TagIcon,
-  History as HistoryIcon,
-  Search as SearchIcon,
-} from '@mui/icons-material';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import DownloadIcon from '@mui/icons-material/Download';
+import PdfIcon from '@mui/icons-material/PictureAsPdf';
+import MaleIcon from '@mui/icons-material/Male';
+import FemaleIcon from '@mui/icons-material/Female';
+import OtherIcon from '@mui/icons-material/Transgender';
+import QuestionMarkIcon from '@mui/icons-material/QuestionMark';
+import TagIcon from '@mui/icons-material/LocalOffer';
+import HistoryIcon from '@mui/icons-material/History';
+import SearchIcon from '@mui/icons-material/Search';
+import GroupIcon from '@mui/icons-material/Group';
+import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk';
+import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import { collection, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -37,6 +40,8 @@ import { EditableCell } from '../components/EditableCell';
 import { EditHistoryDialog } from '../components/EditHistoryDialog';
 import VisitorSearchBar from '../components/VisitorSearchBar';
 import CheckoutComponent from '../components/CheckoutComponent';
+import VisitorDetailsModal from '../components/VisitorDetailsModal';
+import GroupingControls, { GroupByOption } from '../components/GroupingControls';
 import { useAuth } from '../contexts/AuthContext';
 
 const Visitors: React.FC = () => {
@@ -44,6 +49,11 @@ const Visitors: React.FC = () => {
   const [filteredVisitors, setFilteredVisitors] = useState<Visitor[]>([]);
   const [groupedVisitors, setGroupedVisitors] = useState<{ [key: string]: Visitor[] }>({});
   const [groupedFilteredVisitors, setGroupedFilteredVisitors] = useState<{ [key: string]: Visitor[] }>({});
+  const [groupedByGender, setGroupedByGender] = useState<{ [key: string]: Visitor[] }>({});
+  const [groupedByType, setGroupedByType] = useState<{ [key: string]: Visitor[] }>({});
+  const [groupedByGenderAndType, setGroupedByGenderAndType] = useState<{ [key: string]: Visitor[] }>({});
+  const [groupBy, setGroupBy] = useState<GroupByOption>('none');
+  const [activeGroupTab, setActiveGroupTab] = useState<string>('');
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloadMenuAnchor, setDownloadMenuAnchor] = useState<null | HTMLElement>(null);
@@ -52,6 +62,10 @@ const Visitors: React.FC = () => {
     editHistory: any[];
     visitorName?: string;
   }>({ open: false, editHistory: [] });
+  const [detailsModal, setDetailsModal] = useState<{
+    open: boolean;
+    visitor: Visitor | null;
+  }>({ open: false, visitor: null });
   const [isSearching, setIsSearching] = useState(false);
   const [searchResultCount, setSearchResultCount] = useState(0);
 
@@ -74,6 +88,71 @@ const Visitors: React.FC = () => {
         grouped[date] = [];
       }
       grouped[date].push(visitor);
+    });
+
+    return grouped;
+  };
+
+  // Group visitors by gender
+  const groupVisitorsByGender = (visitors: Visitor[]) => {
+    const grouped: { [key: string]: Visitor[] } = {};
+    
+    visitors.forEach(visitor => {
+      const gender = visitor.gender?.toLowerCase() || 'other';
+      const key = gender.charAt(0).toUpperCase() + gender.slice(1);
+      if (!grouped[key]) {
+        grouped[key] = [];
+      }
+      grouped[key].push(visitor);
+    });
+
+    // Sort groups: Male, Female, Other, N/A
+    const sortedGroups: { [key: string]: Visitor[] } = {};
+    ['Male', 'Female', 'Other', 'N/A'].forEach(gender => {
+      if (grouped[gender]) {
+        sortedGroups[gender] = grouped[gender];
+      }
+    });
+
+    return sortedGroups;
+  };
+
+  // Group visitors by type
+  const groupVisitorsByType = (visitors: Visitor[]) => {
+    const grouped: { [key: string]: Visitor[] } = {};
+    
+    visitors.forEach(visitor => {
+      const type = visitor.visitorType?.toLowerCase() || 'foot';
+      const key = type.charAt(0).toUpperCase() + type.slice(1);
+      if (!grouped[key]) {
+        grouped[key] = [];
+      }
+      grouped[key].push(visitor);
+    });
+
+    // Sort groups: Vehicle, Foot
+    const sortedGroups: { [key: string]: Visitor[] } = {};
+    ['Vehicle', 'Foot'].forEach(type => {
+      if (grouped[type]) {
+        sortedGroups[type] = grouped[type];
+      }
+    });
+
+    return sortedGroups;
+  };
+
+  // Group visitors by gender and type
+  const groupVisitorsByGenderAndType = (visitors: Visitor[]) => {
+    const grouped: { [key: string]: Visitor[] } = {};
+    
+    visitors.forEach(visitor => {
+      const gender = visitor.gender?.toLowerCase() || 'other';
+      const type = visitor.visitorType?.toLowerCase() || 'foot';
+      const key = `${gender.charAt(0).toUpperCase() + gender.slice(1)} - ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+      if (!grouped[key]) {
+        grouped[key] = [];
+      }
+      grouped[key].push(visitor);
     });
 
     return grouped;
@@ -153,7 +232,16 @@ const Visitors: React.FC = () => {
       setFilteredVisitors(visitorsData);
       setGroupedVisitors(groupVisitorsByDate(visitorsData));
       setGroupedFilteredVisitors(groupVisitorsByDate(visitorsData));
+      setGroupedByGender(groupVisitorsByGender(visitorsData));
+      setGroupedByType(groupVisitorsByType(visitorsData));
+      setGroupedByGenderAndType(groupVisitorsByGenderAndType(visitorsData));
       setSearchResultCount(visitorsData.length);
+      
+      // Set first group tab as active
+      const firstGroupKey = Object.keys(groupVisitorsByGender(visitorsData))[0];
+      if (firstGroupKey) {
+        setActiveGroupTab(firstGroupKey);
+      }
     } catch (err) {
       console.error('Error fetching data:', err);
     } finally {
@@ -165,6 +253,9 @@ const Visitors: React.FC = () => {
   const handleSearchResults = (filteredVisitors: Visitor[]) => {
     setFilteredVisitors(filteredVisitors);
     setGroupedFilteredVisitors(groupVisitorsByDate(filteredVisitors));
+    setGroupedByGender(groupVisitorsByGender(filteredVisitors));
+    setGroupedByType(groupVisitorsByType(filteredVisitors));
+    setGroupedByGenderAndType(groupVisitorsByGenderAndType(filteredVisitors));
     setIsSearching(true);
     setSearchResultCount(filteredVisitors.length);
   };
@@ -173,95 +264,123 @@ const Visitors: React.FC = () => {
   const handleClearSearch = () => {
     setFilteredVisitors(visitors);
     setGroupedFilteredVisitors(groupVisitorsByDate(visitors));
+    setGroupedByGender(groupVisitorsByGender(visitors));
+    setGroupedByType(groupVisitorsByType(visitors));
+    setGroupedByGenderAndType(groupVisitorsByGenderAndType(visitors));
     setIsSearching(false);
     setSearchResultCount(visitors.length);
   };
 
-// Handle field update
-const handleFieldUpdate = async (field: string, newValue: any, visitorData: Visitor) => {
-  console.log('handleFieldUpdate called:', { field, newValue, visitorData: visitorData.id });
-  
-  if (!isAdmin) {
-    alert('Only admins can edit visitor information.');
-    return false;
-  }
-
-  try {
-    const oldValue = visitorData[field as keyof Visitor];
-    console.log('Old value:', oldValue);
-
-    // Call the update function
-    const success = await updateVisitorField(
-      visitorData.id,
-      field,
-      newValue,
-      oldValue,
-      currentUserUid,
-      visitorData
-    );
-
-    if (!success) {
-      throw new Error('Failed to update field in Firebase');
+  // Handle field update
+  const handleFieldUpdate = async (field: string, newValue: any, visitorData: Visitor) => {
+    console.log('handleFieldUpdate called:', { field, newValue, visitorData: visitorData.id });
+    
+    if (!isAdmin) {
+      alert('Only admins can edit visitor information.');
+      return false;
     }
 
-    // Update local state
-    const updatedVisitor = {
-      ...visitorData,
-      [field]: newValue,
-      editedBy: currentUserUid,
-      lastEditedAt: new Date(),
-      editHistory: [
-        ...(visitorData.editHistory || []),
-        {
-          field,
-          oldValue,
-          newValue,
-          editedBy: currentUserUid,
-          editedAt: new Date(),
-        }
-      ]
-    };
+    try {
+      const oldValue = visitorData[field as keyof Visitor];
+      console.log('Old value:', oldValue);
 
-    // Update visitors state
-    setVisitors(prev => prev.map(v => v.id === visitorData.id ? updatedVisitor : v));
+      // Call the update function
+      const success = await updateVisitorField(
+        visitorData.id,
+        field,
+        newValue,
+        oldValue,
+        currentUserUid,
+        visitorData
+      );
 
-    // Update filtered visitors if in search mode
-    if (isSearching) {
-      setFilteredVisitors(prev => prev.map(v => v.id === visitorData.id ? updatedVisitor : v));
-    }
+      if (!success) {
+        throw new Error('Failed to update field in Firebase');
+      }
 
-    // Update grouped visitors
-    setGroupedVisitors(prev => {
-      const updated = { ...prev };
-      Object.keys(updated).forEach(date => {
-        updated[date] = updated[date].map(v => v.id === visitorData.id ? updatedVisitor : v);
-      });
-      return updated;
-    });
+      // Update local state
+      const updatedVisitor = {
+        ...visitorData,
+        [field]: newValue,
+        editedBy: currentUserUid,
+        lastEditedAt: new Date(),
+        editHistory: [
+          ...(visitorData.editHistory || []),
+          {
+            field,
+            oldValue,
+            newValue,
+            editedBy: currentUserUid,
+            editedAt: new Date(),
+          }
+        ]
+      };
 
-    // Update grouped filtered visitors
-    if (isSearching) {
-      setGroupedFilteredVisitors(prev => {
-        const updated = { ...prev };
-        Object.keys(updated).forEach(date => {
-          updated[date] = updated[date].map(v => v.id === visitorData.id ? updatedVisitor : v);
+      // Update visitors state
+      setVisitors(prev => prev.map(v => v.id === visitorData.id ? updatedVisitor : v));
+
+      // Update filtered visitors if in search mode
+      if (isSearching) {
+        setFilteredVisitors(prev => prev.map(v => v.id === visitorData.id ? updatedVisitor : v));
+      }
+
+      // Update all grouped states
+      const updateAllGroupedStates = () => {
+        setGroupedVisitors(prev => {
+          const updated = { ...prev };
+          Object.keys(updated).forEach(date => {
+            updated[date] = updated[date].map(v => v.id === visitorData.id ? updatedVisitor : v);
+          });
+          return updated;
         });
-        return updated;
-      });
-    }
 
-    console.log('Local state updated successfully');
-    return true;
-  } catch (error) {
-    console.error('Error updating field:', error);
-    alert(`Failed to update field: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    return false;
-  }
-};
+        setGroupedFilteredVisitors(prev => {
+          const updated = { ...prev };
+          Object.keys(updated).forEach(date => {
+            updated[date] = updated[date].map(v => v.id === visitorData.id ? updatedVisitor : v);
+          });
+          return updated;
+        });
+
+        setGroupedByGender(prev => {
+          const updated = { ...prev };
+          Object.keys(updated).forEach(key => {
+            updated[key] = updated[key].map(v => v.id === visitorData.id ? updatedVisitor : v);
+          });
+          return updated;
+        });
+
+        setGroupedByType(prev => {
+          const updated = { ...prev };
+          Object.keys(updated).forEach(key => {
+            updated[key] = updated[key].map(v => v.id === visitorData.id ? updatedVisitor : v);
+          });
+          return updated;
+        });
+
+        setGroupedByGenderAndType(prev => {
+          const updated = { ...prev };
+          Object.keys(updated).forEach(key => {
+            updated[key] = updated[key].map(v => v.id === visitorData.id ? updatedVisitor : v);
+          });
+          return updated;
+        });
+      };
+
+      updateAllGroupedStates();
+
+      console.log('Local state updated successfully');
+      return true;
+    } catch (error) {
+      console.error('Error updating field:', error);
+      alert(`Failed to update field: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return false;
+    }
+  };
 
   // Handle checkout success
   const handleCheckoutSuccess = (updatedVisitor: Visitor) => {
-    // Update local state
+    // Update visitors state
     setVisitors(prev => prev.map(v => v.id === updatedVisitor.id ? updatedVisitor : v));
     
     // Update filtered visitors if in search mode
@@ -269,17 +388,16 @@ const handleFieldUpdate = async (field: string, newValue: any, visitorData: Visi
       setFilteredVisitors(prev => prev.map(v => v.id === updatedVisitor.id ? updatedVisitor : v));
     }
 
-    // Update grouped visitors
-    setGroupedVisitors(prev => {
-      const updated = { ...prev };
-      Object.keys(updated).forEach(date => {
-        updated[date] = updated[date].map(v => v.id === updatedVisitor.id ? updatedVisitor : v);
+    // Update all grouped states
+    const updateAllGroupedStates = () => {
+      setGroupedVisitors(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(date => {
+          updated[date] = updated[date].map(v => v.id === updatedVisitor.id ? updatedVisitor : v);
+        });
+        return updated;
       });
-      return updated;
-    });
 
-    // Update grouped filtered visitors if in search mode
-    if (isSearching) {
       setGroupedFilteredVisitors(prev => {
         const updated = { ...prev };
         Object.keys(updated).forEach(date => {
@@ -287,7 +405,89 @@ const handleFieldUpdate = async (field: string, newValue: any, visitorData: Visi
         });
         return updated;
       });
+
+      setGroupedByGender(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(key => {
+          updated[key] = updated[key].map(v => v.id === updatedVisitor.id ? updatedVisitor : v);
+        });
+        return updated;
+      });
+
+      setGroupedByType(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(key => {
+          updated[key] = updated[key].map(v => v.id === updatedVisitor.id ? updatedVisitor : v);
+        });
+        return updated;
+      });
+
+      setGroupedByGenderAndType(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(key => {
+          updated[key] = updated[key].map(v => v.id === updatedVisitor.id ? updatedVisitor : v);
+        });
+        return updated;
+      });
+    };
+
+    updateAllGroupedStates();
+  };
+
+  // Get current grouping data based on selected option
+  const getCurrentGroupedData = () => {
+    const sourceVisitors = isSearching ? filteredVisitors : visitors;
+    
+    switch (groupBy) {
+      case 'gender':
+        return isSearching ? groupVisitorsByGender(filteredVisitors) : groupedByGender;
+      case 'type':
+        return isSearching ? groupVisitorsByType(filteredVisitors) : groupedByType;
+      case 'gender-type':
+        return isSearching ? groupVisitorsByGenderAndType(filteredVisitors) : groupedByGenderAndType;
+      case 'none':
+      default:
+        return isSearching ? groupedFilteredVisitors : groupedVisitors;
     }
+  };
+
+  // Get group stats for display
+  const getGroupStats = useMemo(() => {
+    const sourceVisitors = isSearching ? filteredVisitors : visitors;
+    const genderGroups = groupVisitorsByGender(sourceVisitors);
+    const typeGroups = groupVisitorsByType(sourceVisitors);
+    const genderTypeGroups = groupVisitorsByGenderAndType(sourceVisitors);
+
+    return {
+      total: sourceVisitors.length,
+      groupedCount: Object.keys(
+        groupBy === 'gender' ? genderGroups :
+        groupBy === 'type' ? typeGroups :
+        groupBy === 'gender-type' ? genderTypeGroups : {}
+      ).length,
+      male: genderGroups['Male']?.length || 0,
+      female: genderGroups['Female']?.length || 0,
+      other: (genderGroups['Other']?.length || 0) + (genderGroups['N/A']?.length || 0),
+      foot: typeGroups['Foot']?.length || 0,
+      vehicle: typeGroups['Vehicle']?.length || 0,
+    };
+  }, [isSearching, filteredVisitors, visitors, groupBy]);
+
+  // Handle group by change
+  const handleGroupByChange = (value: GroupByOption) => {
+    setGroupBy(value);
+    
+    // Set first tab as active when changing grouping
+    const groupedData = getCurrentGroupedData();
+    const firstKey = Object.keys(groupedData)[0];
+    if (firstKey) {
+      setActiveGroupTab(firstKey);
+    }
+  };
+
+  // Handle group tab change
+  const handleGroupTabChange = (event: React.SyntheticEvent, newValue: string) => {
+    setActiveGroupTab(newValue);
   };
 
   // Helper function to get display name from UUID
@@ -346,6 +546,17 @@ const handleFieldUpdate = async (field: string, newValue: any, visitorData: Visi
       return 'N/A';
     }
     return gender;
+  };
+
+  // Helper function to get type icon
+  const getTypeIcon = (type: string) => {
+    switch (type?.toLowerCase()) {
+      case 'vehicle':
+        return <DirectionsCarIcon fontSize="small" />;
+      case 'foot':
+      default:
+        return <DirectionsWalkIcon fontSize="small" />;
+    }
   };
 
   // Helper function for tag display - Simplified to only show tag number or N/A
@@ -408,9 +619,10 @@ const handleFieldUpdate = async (field: string, newValue: any, visitorData: Visi
     return new Date();
   };
 
-  const formatDateTime = (date: Date | undefined): string => {
+  const formatDateTime = (date: string | Date | undefined): string => {
     if (!date) return '-';
-    return date.toLocaleString('en-US', {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return dateObj.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -440,12 +652,53 @@ const handleFieldUpdate = async (field: string, newValue: any, visitorData: Visi
     }
   };
 
-  const getDateStats = (visitors: Visitor[]) => {
+  const formatGroupHeader = (groupKey: string) => {
+    if (groupBy === 'gender') {
+      return `${groupKey} Visitors`;
+    } else if (groupBy === 'type') {
+      return `${groupKey} Visitors`;
+    } else if (groupBy === 'gender-type') {
+      return groupKey;
+    }
+    return formatDateHeader(groupKey);
+  };
+
+  const getGroupStatsForHeader = (visitors: Visitor[]) => {
     const total = visitors.length;
     const active = visitors.filter(v => !v.isCheckedOut).length;
     const overdue = visitors.filter(v => isVisitorOverdue(v)).length;
     
     return { total, active, overdue };
+  };
+
+  // Show visitor details modal
+  const showVisitorDetails = (visitor: Visitor) => {
+    setDetailsModal({
+      open: true,
+      visitor,
+    });
+  };
+
+  // Close visitor details modal
+  const handleCloseDetailsModal = () => {
+    setDetailsModal({ open: false, visitor: null });
+  };
+
+  // Handle edit click from modal
+  const handleEditFromModal = (visitor: Visitor) => {
+    setDetailsModal({ open: false, visitor: null });
+  };
+
+  // Show edit history
+  const showEditHistory = (visitor: Visitor) => {
+    setEditHistoryDialog({
+      open: true,
+      editHistory: visitor.editHistory || [],
+      visitorName: visitor.visitorName,
+    });
+    if (detailsModal.open) {
+      setDetailsModal({ open: false, visitor: null });
+    }
   };
 
   // Download handlers
@@ -480,15 +733,6 @@ const handleFieldUpdate = async (field: string, newValue: any, visitorData: Visi
     handleDownloadPDF(todayVisitors);
   };
 
-  // Show edit history
-  const showEditHistory = (visitor: Visitor) => {
-    setEditHistoryDialog({
-      open: true,
-      editHistory: visitor.editHistory || [],
-      visitorName: visitor.visitorName,
-    });
-  };
-
   const columns: GridColDef[] = [
     { 
       field: 'visitorName', 
@@ -496,16 +740,31 @@ const handleFieldUpdate = async (field: string, newValue: any, visitorData: Visi
       width: 200, 
       flex: 1,
       renderCell: (params: GridRenderCellParams<Visitor>) => (
-        <EditableCell
-          value={params.value}
-          field="visitorName"
-          visitorId={params.row.id || ''}
-          visitorData={params.row}
-          onSave={handleFieldUpdate}
-          currentUserUid={currentUserUid}
-          userRole={userRole || ''}
-          readOnly={!isAdmin}
-        />
+        <Box 
+          onClick={() => showVisitorDetails(params.row)}
+          sx={{ 
+            cursor: 'pointer',
+            '&:hover': {
+              textDecoration: 'underline',
+              color: 'primary.main',
+            },
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            width: '100%',
+          }}
+        >
+          <EditableCell
+            value={params.value}
+            field="visitorName"
+            visitorId={params.row.id || ''}
+            visitorData={params.row}
+            onSave={handleFieldUpdate}
+            currentUserUid={currentUserUid}
+            userRole={userRole || ''}
+            readOnly={!isAdmin}
+          />
+        </Box>
       ),
     },
     { 
@@ -777,8 +1036,8 @@ const handleFieldUpdate = async (field: string, newValue: any, visitorData: Visi
     },
   ];
 
-  // Get the visitors to display (either filtered or all)
-  const displayGroupedVisitors = isSearching ? groupedFilteredVisitors : groupedVisitors;
+  // Get the visitors to display based on current grouping
+  const currentGroupedData = getCurrentGroupedData();
   const displayVisitors = isSearching ? filteredVisitors : visitors;
 
   return (
@@ -848,124 +1107,283 @@ const handleFieldUpdate = async (field: string, newValue: any, visitorData: Visi
       </Box>
 
       {/* Search Bar */}
-      <VisitorSearchBar
-        visitors={visitors}
-        onSearchResults={handleSearchResults}
-        onClearSearch={handleClearSearch}
-      />
+      <Box mb={3}>
+        <VisitorSearchBar
+          visitors={visitors}
+          onSearchResults={handleSearchResults}
+          onClearSearch={handleClearSearch}
+        />
+      </Box>
 
-      {Object.keys(displayGroupedVisitors).length === 0 && !loading ? (
+      {/* Grouping Controls */}
+      <Box mb={3}>
+        <GroupingControls
+          groupBy={groupBy}
+          onGroupByChange={handleGroupByChange}
+          stats={getGroupStats}
+        />
+      </Box>
+
+      {/* Group Tabs (only when grouping is active) */}
+      {groupBy !== 'none' && Object.keys(currentGroupedData).length > 0 && (
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+          <Tabs
+            value={activeGroupTab}
+            onChange={handleGroupTabChange}
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+          >
+            {Object.keys(currentGroupedData).map(groupKey => (
+              <Tab
+                key={groupKey}
+                label={
+                  <Box display="flex" alignItems="center" gap={1}>
+                    {groupBy === 'gender' && getGenderIcon(groupKey)}
+                    {groupBy === 'type' && getTypeIcon(groupKey)}
+                    <span>{groupKey}</span>
+                    <Chip
+                      label={currentGroupedData[groupKey]?.length || 0}
+                      size="small"
+                      sx={{ height: 20 }}
+                    />
+                  </Box>
+                }
+                value={groupKey}
+              />
+            ))}
+          </Tabs>
+        </Box>
+      )}
+
+      {/* Display grouped content */}
+      {Object.keys(currentGroupedData).length === 0 && !loading ? (
         <Alert severity="info" sx={{ mb: 2 }}>
           {isSearching ? 'No visitors found matching your search criteria.' : 'No visitor data found.'}
         </Alert>
       ) : (
-        Object.keys(displayGroupedVisitors)
-          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
-          .map(date => {
-            const dateVisitors = displayGroupedVisitors[date];
-            const stats = getDateStats(dateVisitors);
-            
-            return (
-              <Accordion 
-                key={date} 
-                defaultExpanded={date === new Date().toDateString() && !isSearching}
-                sx={{ mb: 2 }}
-              >
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
-                    <Box display="flex" alignItems="center" gap={2}>
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                        {formatDateHeader(date)}
-                      </Typography>
+        // If grouping is active, show only the active tab's content
+        // If no grouping, show all date-based accordions
+        groupBy === 'none' ? (
+          // Original date-based grouping
+          Object.keys(currentGroupedData)
+            .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+            .map(date => {
+              const dateVisitors = currentGroupedData[date];
+              const stats = getGroupStatsForHeader(dateVisitors);
+              
+              return (
+                <Accordion 
+                  key={date} 
+                  defaultExpanded={date === new Date().toDateString() && !isSearching}
+                  sx={{ mb: 2 }}
+                >
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
+                      <Box display="flex" alignItems="center" gap={2}>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          {formatDateHeader(date)}
+                        </Typography>
+                        <Chip 
+                          label={`${stats.total} visitors`} 
+                          size="small" 
+                          variant="outlined"
+                        />
+                        {stats.active > 0 && (
+                          <Chip 
+                            label={`${stats.active} active`} 
+                            color="success" 
+                            size="small" 
+                            variant="outlined"
+                          />
+                        )}
+                        {stats.overdue > 0 && (
+                          <Chip 
+                            label={`${stats.overdue} overdue`} 
+                            color="error" 
+                            size="small" 
+                          />
+                        )}
+                        {isSearching && dateVisitors.length > 0 && (
+                          <Chip 
+                            label={`${dateVisitors.length} match${dateVisitors.length > 1 ? 'es' : ''}`} 
+                            color="info" 
+                            size="small" 
+                            variant="outlined"
+                          />
+                        )}
+                      </Box>
+                      <Box display="flex" gap={1}>
+                        <Button
+                          size="small"
+                          startIcon={<PdfIcon />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownloadPDF(dateVisitors);
+                          }}
+                        >
+                          PDF
+                        </Button>
+                      </Box>
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ p: 0 }}>
+                    <Paper sx={{ width: '100%' }}>
+                      <DataGrid
+                        rows={dateVisitors}
+                        columns={columns}
+                        loading={loading}
+                        autoHeight
+                        pageSizeOptions={[10, 25, 50]}
+                        initialState={{
+                          pagination: {
+                            paginationModel: { pageSize: 10, page: 0 },
+                          },
+                        }}
+                        sx={{
+                          '& .MuiDataGrid-cell': {
+                            borderBottom: '1px solid #f0f0f0',
+                          },
+                          '& .MuiDataGrid-row:hover': {
+                            backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                          },
+                          '& .overdue-row': {
+                            backgroundColor: 'rgba(244, 67, 54, 0.08)',
+                            '&:hover': {
+                              backgroundColor: 'rgba(244, 67, 54, 0.12)',
+                            },
+                          },
+                          '& .search-highlight-row': {
+                            backgroundColor: 'rgba(255, 245, 204, 0.3)',
+                            '&:hover': {
+                              backgroundColor: 'rgba(255, 245, 204, 0.5)',
+                            },
+                          },
+                        }}
+                        getRowClassName={(params) => {
+                          const classes = [];
+                          if (isVisitorOverdue(params.row)) classes.push('overdue-row');
+                          if (isSearching) classes.push('search-highlight-row');
+                          return classes.join(' ');
+                        }}
+                      />
+                    </Paper>
+                  </AccordionDetails>
+                </Accordion>
+              );
+            })
+        ) : (
+          // Show only the active group's visitors
+          activeGroupTab && currentGroupedData[activeGroupTab] && (
+            <Accordion defaultExpanded sx={{ mb: 2 }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
+                  <Box display="flex" alignItems="center" gap={2}>
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      {formatGroupHeader(activeGroupTab)}
+                    </Typography>
+                    <Chip 
+                      label={`${currentGroupedData[activeGroupTab].length} visitors`} 
+                      size="small" 
+                      variant="outlined"
+                    />
+                    <Chip 
+                      label={`${currentGroupedData[activeGroupTab].filter(v => !v.isCheckedOut).length} active`} 
+                      color="success" 
+                      size="small" 
+                      variant="outlined"
+                    />
+                    {currentGroupedData[activeGroupTab].filter(v => isVisitorOverdue(v)).length > 0 && (
                       <Chip 
-                        label={`${stats.total} visitors`} 
+                        label={`${currentGroupedData[activeGroupTab].filter(v => isVisitorOverdue(v)).length} overdue`} 
+                        color="error" 
+                        size="small" 
+                      />
+                    )}
+                    {isSearching && (
+                      <Chip 
+                        label={`${currentGroupedData[activeGroupTab].length} match${currentGroupedData[activeGroupTab].length > 1 ? 'es' : ''}`} 
+                        color="info" 
                         size="small" 
                         variant="outlined"
                       />
-                      {stats.active > 0 && (
-                        <Chip 
-                          label={`${stats.active} active`} 
-                          color="success" 
-                          size="small" 
-                          variant="outlined"
-                        />
-                      )}
-                      {stats.overdue > 0 && (
-                        <Chip 
-                          label={`${stats.overdue} overdue`} 
-                          color="error" 
-                          size="small" 
-                        />
-                      )}
-                      {isSearching && dateVisitors.length > 0 && (
-                        <Chip 
-                          label={`${dateVisitors.length} match${dateVisitors.length > 1 ? 'es' : ''}`} 
-                          color="info" 
-                          size="small" 
-                          variant="outlined"
-                        />
-                      )}
-                    </Box>
-                    <Box display="flex" gap={1}>
-                      <Button
-                        size="small"
-                        startIcon={<PdfIcon />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDownloadPDF(dateVisitors);
-                        }}
-                      >
-                        PDF
-                      </Button>
-                    </Box>
+                    )}
                   </Box>
-                </AccordionSummary>
-                <AccordionDetails sx={{ p: 0 }}>
-                  <Paper sx={{ width: '100%' }}>
-                    <DataGrid
-                      rows={dateVisitors}
-                      columns={columns}
-                      loading={loading}
-                      autoHeight
-                      pageSizeOptions={[10, 25, 50]}
-                      initialState={{
-                        pagination: {
-                          paginationModel: { pageSize: 10, page: 0 },
-                        },
+                  <Box display="flex" gap={1}>
+                    <Button
+                      size="small"
+                      startIcon={<PdfIcon />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownloadPDF(currentGroupedData[activeGroupTab]);
                       }}
-                      sx={{
-                        '& .MuiDataGrid-cell': {
-                          borderBottom: '1px solid #f0f0f0',
+                    >
+                      PDF
+                    </Button>
+                  </Box>
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails sx={{ p: 0 }}>
+                <Paper sx={{ width: '100%' }}>
+                  <DataGrid
+                    rows={currentGroupedData[activeGroupTab]}
+                    columns={columns}
+                    loading={loading}
+                    autoHeight
+                    pageSizeOptions={[10, 25, 50]}
+                    initialState={{
+                      pagination: {
+                        paginationModel: { pageSize: 10, page: 0 },
+                      },
+                    }}
+                    sx={{
+                      '& .MuiDataGrid-cell': {
+                        borderBottom: '1px solid #f0f0f0',
+                      },
+                      '& .MuiDataGrid-row:hover': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                      },
+                      '& .overdue-row': {
+                        backgroundColor: 'rgba(244, 67, 54, 0.08)',
+                        '&:hover': {
+                          backgroundColor: 'rgba(244, 67, 54, 0.12)',
                         },
-                        '& .MuiDataGrid-row:hover': {
-                          backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                      },
+                      '& .search-highlight-row': {
+                        backgroundColor: 'rgba(255, 245, 204, 0.3)',
+                        '&:hover': {
+                          backgroundColor: 'rgba(255, 245, 204, 0.5)',
                         },
-                        '& .overdue-row': {
-                          backgroundColor: 'rgba(244, 67, 54, 0.08)',
-                          '&:hover': {
-                            backgroundColor: 'rgba(244, 67, 54, 0.12)',
-                          },
-                        },
-                        '& .search-highlight-row': {
-                          backgroundColor: 'rgba(255, 245, 204, 0.3)',
-                          '&:hover': {
-                            backgroundColor: 'rgba(255, 245, 204, 0.5)',
-                          },
-                        },
-                      }}
-                      getRowClassName={(params) => {
-                        const classes = [];
-                        if (isVisitorOverdue(params.row)) classes.push('overdue-row');
-                        if (isSearching) classes.push('search-highlight-row');
-                        return classes.join(' ');
-                      }}
-                    />
-                  </Paper>
-                </AccordionDetails>
-              </Accordion>
-            );
-          })
+                      },
+                    }}
+                    getRowClassName={(params) => {
+                      const classes = [];
+                      if (isVisitorOverdue(params.row)) classes.push('overdue-row');
+                      if (isSearching) classes.push('search-highlight-row');
+                      return classes.join(' ');
+                    }}
+                  />
+                </Paper>
+              </AccordionDetails>
+            </Accordion>
+          )
+        )
       )}
+
+      {/* Visitor Details Modal */}
+      <VisitorDetailsModal
+        open={detailsModal.open}
+        onClose={handleCloseDetailsModal}
+        visitor={detailsModal.visitor}
+        users={users}
+        isAdmin={isAdmin}
+        onEditClick={handleEditFromModal}
+        onViewHistoryClick={showEditHistory}
+        formatDateTime={formatDateTime}
+        getDisplayNameFromUUID={getDisplayNameFromUUID}
+        getGenderIcon={getGenderIcon}
+        getTagDisplay={getTagDisplay}
+      />
 
       <EditHistoryDialog
         open={editHistoryDialog.open}

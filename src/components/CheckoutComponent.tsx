@@ -13,10 +13,8 @@ import {
   Typography,
   Alert,
 } from '@mui/material';
-import {
-  Warning as WarningIcon,
-  Logout as LogoutIcon,
-} from '@mui/icons-material';
+import WarningIcon from '@mui/icons-material/Warning';
+import LogoutIcon from '@mui/icons-material/Logout';
 import { Visitor } from '../types';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';

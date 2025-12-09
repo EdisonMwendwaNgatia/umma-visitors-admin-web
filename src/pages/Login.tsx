@@ -12,14 +12,12 @@ import {
   CircularProgress,
   Fade,
 } from '@mui/material';
-import {
-  Visibility,
-  VisibilityOff,
-  Email,
-  Lock,
-  Security,
-  Business,
-} from '@mui/icons-material';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import Email from '@mui/icons-material/Email';
+import Lock from '@mui/icons-material/Lock';
+import Security from '@mui/icons-material/Security';
+import Business from '@mui/icons-material/Business';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';

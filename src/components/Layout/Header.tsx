@@ -14,14 +14,12 @@ import {
   ListItemIcon,
   ListItemText,
 } from '@mui/material';
-import {
-  Menu as MenuIcon,
-  Notifications as NotificationsIcon,
-  AccountCircle as AccountIcon,
-  Settings as SettingsIcon,
-  Logout as LogoutIcon,
-  Warning as WarningIcon,
-} from '@mui/icons-material';
+import MenuIcon from '@mui/icons-material/Menu';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import AccountIcon from '@mui/icons-material/AccountCircle';
+import SettingsIcon from '@mui/icons-material/Settings';
+import LogoutIcon from '@mui/icons-material/Logout';
+import WarningIcon from '@mui/icons-material/Warning';
 import { useAppData } from '../../contexts/AppDataContext';
 
 interface HeaderProps {

@@ -17,18 +17,16 @@ import {
   Avatar,
   Chip,
 } from '@mui/material';
-import {
-  Dashboard as DashboardIcon,
-  People as PeopleIcon,
-  AccountCircle as UserIcon,
-  Logout as LogoutIcon,
-  ChevronLeft as ChevronLeftIcon,
-  ChevronRight as ChevronRightIcon,
-  Business as BusinessIcon,
-  Warning as WarningIcon,
-  PersonAdd as CheckInIcon,
-  ExitToApp as CheckOutIcon,
-} from '@mui/icons-material';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import PeopleIcon from '@mui/icons-material/People';
+import UserIcon from '@mui/icons-material/AccountCircle';
+import LogoutIcon from '@mui/icons-material/Logout';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import BusinessIcon from '@mui/icons-material/Business';
+import WarningIcon from '@mui/icons-material/Warning';
+import CheckInIcon from '@mui/icons-material/PersonAdd';
+import CheckOutIcon from '@mui/icons-material/ExitToApp';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppData } from '../../contexts/AppDataContext';
 

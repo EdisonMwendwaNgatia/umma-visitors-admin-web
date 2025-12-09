@@ -11,15 +11,13 @@ import {
   Tooltip,
   Paper,
 } from '@mui/material';
-import {
-  Search as SearchIcon,
-  Close as CloseIcon,
-  FilterList as FilterListIcon,
-  Person as PersonIcon,
-  Phone as PhoneIcon,
-  Badge as BadgeIcon,
-  LocalOffer as TagIcon,
-} from '@mui/icons-material';
+import SearchIcon from '@mui/icons-material/Search';
+import CloseIcon from '@mui/icons-material/Close';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import PersonIcon from '@mui/icons-material/Person';
+import PhoneIcon from '@mui/icons-material/Phone';
+import BadgeIcon from '@mui/icons-material/Badge';
+import TagIcon from '@mui/icons-material/LocalOffer';
 import { Visitor } from '../types';
 
 interface VisitorSearchBarProps {

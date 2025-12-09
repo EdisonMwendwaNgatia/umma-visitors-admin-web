@@ -11,15 +11,13 @@ import {
   useTheme,
   useMediaQuery,
 } from '@mui/material';
-import {
-  People as PeopleIcon,
-  Schedule as ScheduleIcon,
-  Warning as WarningIcon,
-  DirectionsWalk as WalkIcon,
-  DirectionsCar as CarIcon,
-  CheckCircle as CheckCircleIcon,
-  TrendingUp as TrendingUpIcon,
-} from '@mui/icons-material';
+import PeopleIcon from '@mui/icons-material/People';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import WarningIcon from '@mui/icons-material/Warning';
+import WalkIcon from '@mui/icons-material/DirectionsWalk';
+import CarIcon from '@mui/icons-material/DirectionsCar';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import { collection, getDocs, Timestamp, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { Stats, Visitor } from '../types';

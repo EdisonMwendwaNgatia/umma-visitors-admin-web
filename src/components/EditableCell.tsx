@@ -11,11 +11,9 @@ import {
   ClickAwayListener,
   SelectChangeEvent,
 } from '@mui/material';
-import {
-  Edit as EditIcon,
-  Check as CheckIcon,
-  Close as CloseIcon,
-} from '@mui/icons-material';
+import EditIcon from '@mui/icons-material/Edit';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
 
 interface EditableCellProps {
   value: any;

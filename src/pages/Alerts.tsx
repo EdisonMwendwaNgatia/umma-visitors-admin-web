@@ -15,18 +15,16 @@ import {
   Divider,
   Alert,
 } from '@mui/material';
-import {
-  Warning as WarningIcon,
-  Schedule as ScheduleIcon,
-  Phone as PhoneIcon,
-  Badge as BadgeIcon,
-  DirectionsCar as CarIcon,
-  DirectionsWalk as WalkIcon,
-  Business as BusinessIcon,
-  CheckCircle as CheckCircleIcon,
-  TrendingUp as TrendingUpIcon,
-  Notifications as NotificationsIcon,
-} from '@mui/icons-material';
+import WarningIcon from '@mui/icons-material/Warning';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import PhoneIcon from '@mui/icons-material/Phone';
+import BadgeIcon from '@mui/icons-material/Badge';
+import CarIcon from '@mui/icons-material/DirectionsCar';
+import WalkIcon from '@mui/icons-material/DirectionsWalk';
+import BusinessIcon from '@mui/icons-material/Business';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 import { collection, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { Visitor } from '../types';

@@ -50,4 +50,26 @@ export interface User {
   email: string;
   displayName?: string; 
   role?: string; 
+  isOnline?: boolean;
+  lastSeen?: Date | null;
+  platform?: 'web' | 'mobile';
+  deviceInfo?: string;
+  // Timestamps
+  createdAt?: string;
+  lastLoginAt?: string;
+  // Additional metadata
+  metadata?: {
+    [key: string]: any;
+  };
+}
+
+export interface UserPresence {
+  uid: string;
+  state: 'online' | 'offline' | 'away';
+  lastChanged: number;
+  email?: string;
+  displayName?: string;
+  platform: 'web' | 'mobile';
+  deviceInfo?: string;
+  appVersion?: string;
 }

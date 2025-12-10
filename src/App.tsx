@@ -5,6 +5,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDataProvider } from './contexts/AppDataContext';
+import { useUserPresence } from './hooks/useUserPresence';
 import Layout from './components/Layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Visitors from './pages/Visitors';
@@ -58,6 +59,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 };
 
 function App() {
+  useUserPresence();
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />

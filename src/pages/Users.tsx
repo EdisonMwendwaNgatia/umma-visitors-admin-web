@@ -1651,3 +1651,385 @@ const Users: React.FC = () => {
 };
 
 export default Users;
+
+
+
+
+
+//using the components
+
+// import React, { useState, useEffect, useMemo } from 'react';
+// import {
+//   Box,
+//   Typography,
+//   Divider,
+//   useTheme,
+// } from '@mui/material';
+// import { auth } from '../config/firebase';
+// import { User } from '../types';
+// import jsPDF from 'jspdf';
+// import autoTable from 'jspdf-autotable';
+// import * as XLSX from 'xlsx';
+
+// // Import components
+// import { 
+//   UserStatsDashboard,
+//   UserFiltersToolbar,
+//   UserActionButtons,
+//   AddUserDialog,
+//   EditRoleDialog,
+//   DeleteUserDialog,
+// } from '../components/users';
+// import UserTable from '../components/users/UserTable';
+// import LoadingState from '../components/shared/LoadingState';
+// import SnackbarNotification from '../components/shared/SnackbarNotification';
+
+// // Import custom hook
+// import { useUsersData } from '../hooks/useUsersData';
+
+// // Import existing dialogs
+// import SendMessageDialog from '../components/SendMessageDialog';
+// import UserDetailsDialog from '../components/UserDetailsDialog';
+
+// const Users: React.FC = () => {
+//   const [editingUser, setEditingUser] = useState<User | null>(null);
+//   const [addUserOpen, setAddUserOpen] = useState(false);
+//   const [deleteDialog, setDeleteDialog] = useState<{
+//     open: boolean;
+//     user: User | null;
+//   }>({ open: false, user: null });
+//   const [roleDialog, setRoleDialog] = useState<{
+//     open: boolean;
+//     user: User | null;
+//   }>({ open: false, user: null });
+//   const [messageDialog, setMessageDialog] = useState<{
+//     open: boolean;
+//     user: User | null;
+//   }>({ open: false, user: null });
+//   const [detailsDialog, setDetailsDialog] = useState<{
+//     open: boolean;
+//     user: User | null;
+//   }>({ open: false, user: null });
+//   const [snackbar, setSnackbar] = useState({ 
+//     open: false, 
+//     message: '', 
+//     severity: 'success' as 'success' | 'error' | 'warning' 
+//   });
+//   const [filterStatus, setFilterStatus] = useState<string>('all');
+//   const [filterRole, setFilterRole] = useState<string>('all');
+//   const [filterPlatform, setFilterPlatform] = useState<string>('all');
+//   const [searchQuery, setSearchQuery] = useState('');
+
+//   const {
+//     users,
+//     loading,
+//     realTimeStats,
+//     fetchUsers,
+//     addUser: addUserApi,
+//     updateUserRole: updateUserRoleApi,
+//     deleteUser: deleteUserApi,
+//   } = useUsersData();
+
+//   // Calculate statistics
+//   const stats = useMemo(() => {
+//     const totalUsers = users.length;
+//     const onlineUsers = users.filter(user => user.isOnline).length;
+//     const adminCount = users.filter(user => user.role === 'admin').length;
+//     const userCount = users.filter(user => user.role === 'user').length;
+//     const webUsers = users.filter(user => user.platform === 'web').length;
+//     const mobileUsers = users.filter(user => user.platform === 'mobile').length;
+    
+//     const today = new Date();
+//     today.setHours(0, 0, 0, 0);
+//     const activeToday = users.filter(user => 
+//       user.lastLoginAt && new Date(user.lastLoginAt) >= today
+//     ).length;
+
+//     return {
+//       totalUsers,
+//       onlineUsers,
+//       adminCount,
+//       userCount,
+//       webUsers,
+//       mobileUsers,
+//       offlineUsers: totalUsers - onlineUsers,
+//       activeToday,
+//     };
+//   }, [users]);
+
+//   const showSnackbar = (message: string, severity: 'success' | 'error' | 'warning') => {
+//     setSnackbar({ open: true, message, severity });
+//   };
+
+//   // Filter users based on selected filters and search
+//   const filteredUsers = useMemo(() => {
+//     let filtered = users.filter(user => {
+//       // Filter by status
+//       if (filterStatus === 'online' && !user.isOnline) return false;
+//       if (filterStatus === 'offline' && user.isOnline) return false;
+      
+//       // Filter by role
+//       if (filterRole !== 'all' && user.role !== filterRole) return false;
+      
+//       // Filter by platform
+//       if (filterPlatform !== 'all' && user.platform !== filterPlatform) return false;
+      
+//       return true;
+//     });
+
+//     // Apply search filter
+//     if (searchQuery.trim()) {
+//       const query = searchQuery.toLowerCase();
+//       filtered = filtered.filter(user => 
+//         user.email.toLowerCase().includes(query) ||
+//         (user.displayName && user.displayName.toLowerCase().includes(query)) ||
+//         (user.deviceInfo && user.deviceInfo.toLowerCase().includes(query))
+//       );
+//     }
+
+//     return filtered;
+//   }, [users, filterStatus, filterRole, filterPlatform, searchQuery]);
+
+//   const handleEditDisplayName = (user: User) => {
+//     setEditingUser(user);
+//   };
+
+//   const handleSaveDisplayName = async () => {
+//     if (!editingUser || !editingUser.displayName?.trim()) return;
+
+//     try {
+//       showSnackbar('User name updated successfully', 'success');
+//       setEditingUser(null);
+//     } catch (error) {
+//       console.error('Error saving display name:', error);
+//       showSnackbar('Error updating user name', 'error');
+//     }
+//   };
+
+//   const handleUpdateRole = async (user: User, newRole: string) => {
+//     try {
+//       await updateUserRoleApi(user.uid, newRole);
+//       setRoleDialog({ open: false, user: null });
+//       showSnackbar('User role updated', 'success');
+//     } catch (err) {
+//       console.error('Error updating role:', err);
+//       showSnackbar('Error updating user role', 'error');
+//     }
+//   };
+
+//   const handleAddUser = async (newUser: {
+//     email: string;
+//     password: string;
+//     displayName: string;
+//     role: string;
+//   }) => {
+//     try {
+//       await addUserApi(newUser);
+//       setAddUserOpen(false);
+//       showSnackbar('User created successfully', 'success');
+//     } catch (error: any) {
+//       console.error('Error creating user:', error);
+//       let errorMessage = 'Error creating user';
+      
+//       if (error.code === 'auth/email-already-in-use') {
+//         errorMessage = 'Email is already in use';
+//       } else if (error.code === 'auth/weak-password') {
+//         errorMessage = 'Password is too weak';
+//       } else if (error.code === 'auth/invalid-email') {
+//         errorMessage = 'Invalid email address';
+//       }
+      
+//       showSnackbar(errorMessage, 'error');
+//     }
+//   };
+
+//   const handleDeleteUser = async (user: User) => {
+//     try {
+//       await deleteUserApi(user);
+//       setDeleteDialog({ open: false, user: null });
+//       showSnackbar(`${user.displayName || user.email} has been deleted successfully`, 'success');
+//     } catch (error) {
+//       console.error('Error deleting user:', error);
+//       showSnackbar('Error deleting user', 'error');
+//     }
+//   };
+
+//   const handleExportPDF = () => {
+//     const doc = new jsPDF();
+    
+//     doc.setFontSize(18);
+//     doc.text('User Management Report', 14, 22);
+//     doc.setFontSize(11);
+//     doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30);
+    
+//     const tableData = filteredUsers.map(user => [
+//       user.displayName || user.email.split('@')[0],
+//       user.email,
+//       user.role || 'user',
+//       user.platform || 'web',
+//       user.isOnline ? 'Online' : 'Offline',
+//       user.lastSeen ? new Date(user.lastSeen).toLocaleString() : 'Never',
+//     ]);
+    
+//     autoTable(doc, {
+//       head: [['Name', 'Email', 'Role', 'Platform', 'Status', 'Last Active']],
+//       body: tableData,
+//       startY: 40,
+//     });
+    
+//     const summaryY = (doc as any).lastAutoTable.finalY + 10;
+//     doc.setFontSize(12);
+//     doc.text('Summary', 14, summaryY);
+//     doc.setFontSize(10);
+//     doc.text(`Total Users: ${stats.totalUsers}`, 14, summaryY + 8);
+//     doc.text(`Online Users: ${stats.onlineUsers}`, 14, summaryY + 16);
+//     doc.text(`Offline Users: ${stats.offlineUsers}`, 14, summaryY + 24);
+    
+//     doc.save(`users-report-${new Date().toISOString().split('T')[0]}.pdf`);
+//   };
+
+//   const handleExportExcel = () => {
+//     const worksheet = XLSX.utils.json_to_sheet(filteredUsers.map(user => ({
+//       Name: user.displayName || user.email.split('@')[0],
+//       Email: user.email,
+//       Role: user.role || 'user',
+//       Platform: user.platform || 'web',
+//       Status: user.isOnline ? 'Online' : 'Offline',
+//       'Last Active': user.lastSeen ? new Date(user.lastSeen).toLocaleString() : 'Never',
+//       'Created At': user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A',
+//       'Device Info': user.deviceInfo || 'N/A',
+//     })));
+    
+//     const workbook = XLSX.utils.book_new();
+//     XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
+    
+//     XLSX.writeFile(workbook, `users-export-${new Date().toISOString().split('T')[0]}.xlsx`);
+//   };
+
+//   if (loading && users.length === 0) {
+//     return <LoadingState message="Loading users..." />;
+//   }
+
+//   return (
+//     <Box sx={{ p: 3 }}>
+//       {/* Header */}
+//       <Box sx={{ mb: 4 }}>
+//         <Typography 
+//           variant="h3" 
+//           gutterBottom 
+//           sx={{ 
+//             fontWeight: 800,
+//             background: 'linear-gradient(135deg, #1F2937 0%, #4B5563 100%)',
+//             backgroundClip: 'text',
+//             WebkitBackgroundClip: 'text',
+//             WebkitTextFillColor: 'transparent',
+//           }}
+//         >
+//           User Management
+//         </Typography>
+//         <Typography 
+//           variant="h6" 
+//           color="text.secondary"
+//           sx={{ fontWeight: 500 }}
+//         >
+//           Manage system users, track activity across web and mobile platforms
+//         </Typography>
+//       </Box>
+
+//       {/* Stats Dashboard */}
+//       <UserStatsDashboard
+//         stats={stats}
+//         realTimeStats={realTimeStats}
+//         loading={loading}
+//       />
+
+//       {/* Users Table Section */}
+//       <Box>
+//         <UserActionButtons
+//           onExportPDF={handleExportPDF}
+//           onExportExcel={handleExportExcel}
+//           onAddUser={() => setAddUserOpen(true)}
+//           onRefresh={fetchUsers}
+//           loading={loading}
+//           filteredCount={filteredUsers.length}
+//           totalCount={users.length}
+//         />
+
+//         <UserFiltersToolbar
+//           filterStatus={filterStatus}
+//           setFilterStatus={setFilterStatus}
+//           filterRole={filterRole}
+//           setFilterRole={setFilterRole}
+//           filterPlatform={filterPlatform}
+//           setFilterPlatform={setFilterPlatform}
+//           searchQuery={searchQuery}
+//           setSearchQuery={setSearchQuery}
+//         />
+
+//         <Divider sx={{ mb: 3 }} />
+
+//         <UserTable
+//           users={users}
+//           filteredUsers={filteredUsers}
+//           loading={loading}
+//           editingUser={editingUser}
+//           currentUserUid={auth.currentUser?.uid}
+//           onEditDisplayName={handleEditDisplayName}
+//           onOpenRoleDialog={(user) => setRoleDialog({ open: true, user })}
+//           onOpenDeleteDialog={(user) => setDeleteDialog({ open: true, user })}
+//           onOpenMessageDialog={(user) => setMessageDialog({ open: true, user })}
+//           onOpenDetailsDialog={(user) => setDetailsDialog({ open: true, user })}
+//           onSaveDisplayName={handleSaveDisplayName}
+//           onCancelEdit={() => setEditingUser(null)}
+//           setEditingUser={setEditingUser}
+//         />
+//       </Box>
+
+//       {/* Dialogs */}
+//       <AddUserDialog
+//         open={addUserOpen}
+//         onClose={() => setAddUserOpen(false)}
+//         onAddUser={handleAddUser}
+//       />
+
+//       <EditRoleDialog
+//         open={roleDialog.open}
+//         user={roleDialog.user}
+//         onClose={() => setRoleDialog({ open: false, user: null })}
+//         onUpdateRole={handleUpdateRole}
+//       />
+
+//       <DeleteUserDialog
+//         open={deleteDialog.open}
+//         user={deleteDialog.user}
+//         onClose={() => setDeleteDialog({ open: false, user: null })}
+//         onDeleteUser={handleDeleteUser}
+//         currentUserUid={auth.currentUser?.uid}
+//       />
+
+//       {/* Existing Dialogs */}
+//       <SendMessageDialog
+//         open={messageDialog.open}
+//         onClose={() => setMessageDialog({ open: false, user: null })}
+//         user={messageDialog.user}
+//         currentUserEmail={auth.currentUser?.email || undefined}
+//       />
+
+//       <UserDetailsDialog
+//         open={detailsDialog.open}
+//         onClose={() => setDetailsDialog({ open: false, user: null })}
+//         user={detailsDialog.user}
+//       />
+
+//       {/* Snackbar */}
+//       <SnackbarNotification
+//         open={snackbar.open}
+//         message={snackbar.message}
+//         severity={snackbar.severity}
+//         onClose={() => setSnackbar({ ...snackbar, open: false })}
+//       />
+//     </Box>
+//   );
+// };
+
+// export default Users;
